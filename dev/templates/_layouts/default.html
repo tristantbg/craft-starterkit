@@ -1,0 +1,66 @@
+<!doctype html>
+<html class="no-js" lang="en">
+
+  <head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+    <title>
+      {% if title %}{{ title }} | {% endif %}
+      {{ siteName }}
+    </title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {# Global styles #}
+    {{ craft.config.webFontCode|raw }}
+    <link rel="stylesheet" type="text/css" href="{{ craft.config.tmpl.css }}/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="{{ craft.config.tmpl.css }}/styles.css">
+
+    {# Page-specific styles (if they exist) #}
+    {% block page_styles %}{% endblock %}
+
+    {# Enable livereload if we're developing locally #}
+    {% if craft.config.env == "local" %}
+      {% spaceless %}
+        <script type="text/javascript">//<![CDATA[
+          document.write('<script src="' + (location.protocol || 'http:') + '//' + (location.hostname || 'localhost') + ':35729/livereload.js?snipver=1" type="text/javascript"><\/script>')
+        //]]></script>
+      {% endspaceless %}
+    {% endif %}
+
+  </head>
+
+  <body class="{{ bodyClasses ?: '' }}">
+
+    {% include "_partials/header.html" %}
+
+    {# Page content #}
+    {% block page_content %}{% endblock %}
+
+    {% include "_partials/footer.html" %}
+
+    {# Site-wide javascript #}
+    {% if craft.config.env == "local" %}
+      <script src="{{ craft.config.tmpl.js }}/lib/jquery.js"></script>
+      <script src="{{ craft.config.tmpl.js }}/lib/bootstrap.js"></script>
+      <script src="{{ craft.config.tmpl.js }}/scripts.js"></script>
+    {% else %}
+      <script src="{{ craft.config.tmpl.js }}/scripts.min.js"></script>
+    {% endif %}
+
+    {% block page_script_tags %}{% endblock %}
+
+    {# Page-specific javascript (if it exists) #}
+    {% if block('page_scripts') %}
+      <script type="text/javascript">
+        jQuery(document).ready(function($) {
+          {% block page_scripts %}{% endblock %}
+        });
+      </script>
+    {% endif %}
+
+  </body>
+
+</html>
