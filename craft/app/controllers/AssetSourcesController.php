@@ -127,7 +127,8 @@ class AssetSourcesController extends BaseController
 			$source = new AssetSourceModel();
 		}
 
-		$source->name = craft()->request->getPost('name');
+		$source->name   = craft()->request->getPost('name');
+		$source->handle = craft()->request->getPost('handle');
 
 		if (craft()->getEdition() == Craft::Pro)
 		{
@@ -135,18 +136,15 @@ class AssetSourcesController extends BaseController
 		}
 
 		$typeSettings = craft()->request->getPost('types');
+
 		if (isset($typeSettings[$source->type]))
 		{
-			if (!$source->settings)
-			{
-				$source->settings = array();
-			}
-
+			$source->settings = array();
 			$source->settings = array_merge($source->settings, $typeSettings[$source->type]);
 		}
 
 		// Set the field layout
-		$fieldLayout = craft()->fields->assembleLayoutFromPost(false);
+		$fieldLayout = craft()->fields->assembleLayoutFromPost();
 		$fieldLayout->type = ElementType::Asset;
 		$source->setFieldLayout($fieldLayout);
 

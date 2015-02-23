@@ -22,10 +22,8 @@ Craft.UpdateInfo = Garnish.Base.extend(
 
 	allowAutoUpdates: null,
 
-	init: function(allowAutoUpdates)
+	init: function()
 	{
-		this.allowAutoUpdates = allowAutoUpdates;
-
 		var $graphic = $('#graphic'),
 			$status = $('#status');
 
@@ -68,6 +66,8 @@ Craft.UpdateInfo = Garnish.Base.extend(
 						$status.remove();
 
 						this.appUpdateInfo = response.app;
+						this.allowAutoUpdates = response.allowAutoUpdates;
+
 						this.showAvailableUpdates();
 					}, this));
 				}
@@ -87,25 +87,22 @@ Craft.UpdateInfo = Garnish.Base.extend(
 			$buttonContainer = $('<div class="buttons"/>').appendTo($headerPane);
 
 		// Is a manual update required?
-		if (this.appUpdateInfo.manualUpdateRequired)
+		if (!this.allowAutoUpdates || this.appUpdateInfo.manualUpdateRequired)
 		{
 			this.$downloadBtn = $('<div class="btn submit">'+Craft.t('Download')+'</div>').appendTo($buttonContainer);
 		}
 		else
 		{
-			if (this.allowAutoUpdates)
-			{
-				var $btnGroup = $('<div class="btngroup submit"/>').appendTo($buttonContainer),
-					$updateBtn = $('<div class="btn submit">'+Craft.t('Update')+'</div>').appendTo($btnGroup),
-					$menuBtn = $('<div class="btn submit menubtn"/>').appendTo($btnGroup),
-					$menu = $('<div class="menu" data-align="right"/>').appendTo($btnGroup),
-					$menuUl = $('<ul/>').appendTo($menu),
-					$downloadLi = $('<li/>').appendTo($menuUl);
+			var $btnGroup = $('<div class="btngroup submit"/>').appendTo($buttonContainer),
+				$updateBtn = $('<div class="btn submit">'+Craft.t('Update')+'</div>').appendTo($btnGroup),
+				$menuBtn = $('<div class="btn submit menubtn"/>').appendTo($btnGroup),
+				$menu = $('<div class="menu" data-align="right"/>').appendTo($btnGroup),
+				$menuUl = $('<ul/>').appendTo($menu),
+				$downloadLi = $('<li/>').appendTo($menuUl);
 
-				this.$downloadBtn = $('<a>'+Craft.t('Download')+'</a>').appendTo($downloadLi);
+			this.$downloadBtn = $('<a>'+Craft.t('Download')+'</a>').appendTo($downloadLi);
 
-				new Garnish.MenuBtn($menuBtn);
-			}
+			new Garnish.MenuBtn($menuBtn);
 		}
 
 		if (this.allowAutoUpdates)

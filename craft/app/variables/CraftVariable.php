@@ -21,6 +21,11 @@ class CraftVariable
 	 */
 	private $_rebrandVariable;
 
+	/**
+	 * @var array
+	 */
+	private $_pluginVariableInstances;
+
 	// Public Methods
 	// =========================================================================
 
@@ -44,7 +49,13 @@ class CraftVariable
 				Craft::import('plugins.'.StringHelper::toLowerCase($pluginName).'.variables.'.$pluginName.'Variable');
 			}
 
-			return new $className;
+			// If we haven't done this one yet, create it and save it for later.
+			if (!isset($this->_pluginVariableInstances[$className]))
+			{
+				$this->_pluginVariableInstances[$className] = new $className;
+			}
+
+			return $this->_pluginVariableInstances[$className];
 		}
 	}
 
@@ -149,14 +160,6 @@ class CraftVariable
 	}
 
 	/**
-	 * @return FieldTypesVariable
-	 */
-	public function fieldTypes()
-	{
-		return new FieldTypesVariable();
-	}
-
-	/**
 	 * @return CpVariable
 	 */
 	public function cp()
@@ -226,14 +229,6 @@ class CraftVariable
 	public function feeds()
 	{
 		return new FeedsVariable();
-	}
-
-	/**
-	 * @return LinksVariable
-	 */
-	public function links()
-	{
-		return new LinksVariable();
 	}
 
 	/**
