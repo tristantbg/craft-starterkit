@@ -14,11 +14,11 @@ return array(
    * ---------------------------------------------------------------------------
    * See: http://buildwithcraft.com/docs/config-settings
    */
+  "devMode"                  => false,
   "addTrailingSlashesToUrls" => true,
-  "postCpLoginRedirect" => "dashboard",
-  "siteUrl" => "http://" . $_SERVER["SERVER_NAME"],
-  "useEmailAsUsername" => true,
-
+  "postCpLoginRedirect"      => "entries",
+  "siteUrl"                  => "http://" . $_SERVER["SERVER_NAME"],
+  "useEmailAsUsername"       => true,
 
   /*
    * Custom config variables
@@ -30,7 +30,7 @@ return array(
   "env" => CRAFT_ENVIRONMENT,
 
   // Template settings
-  "tmpl" => array(
+  "tmpl"  => array(
     "css" => "/assets/css",
     "img" => "/assets/img",
     "js"  => "/assets/js"
