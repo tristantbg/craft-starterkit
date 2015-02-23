@@ -3,3 +3,4 @@ node_modules
 bower
 *.sublime-project
 *.sublime-workspace
+craft/config/license.key
