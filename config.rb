@@ -1,11 +1,11 @@
 # Require any additional compass plugins here.
 
 # http_path = "/public"
-css_dir = "public/assets/css"
-sass_dir = "dev/assets/css"
-images_dir = "public/assets/img"
+css_dir          = "public/assets/css"
+sass_dir         = "dev/assets/css"
+images_dir       = "public/assets/img"
 http_images_path = "/assets/img"
-javascripts_dir = "public/assets/js"
+javascripts_dir  = "public/assets/js"
 
 # You can select your preferred output style here (can be overridden via the command line):
 #output_style = :expanded or :nested or :compact or :compressed

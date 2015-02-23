@@ -4,7 +4,7 @@
   "authors": [
     "Ray Brown <ray@bitmanic.com>"
   ],
-  "license": "Copyright 2014 Bitmanic",
+  "license": "Copyright 2015 Bitmanic",
   "private": true,
   "ignore": [
     "**/.*",

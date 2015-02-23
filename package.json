@@ -7,7 +7,7 @@
     "name": "Ray Brown",
     "url": "http://bitmanic.com/"
   },
-  "license": "Copyright 2014 Bitmanic",
+  "license": "Copyright 2015 Bitmanic",
   "devDependencies": {
     "grunt": "~0.4.5",
     "grunt-contrib-clean": "~0.6.0",
