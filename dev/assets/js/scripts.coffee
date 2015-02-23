@@ -9,47 +9,11 @@ namespace = (target, name, block) ->
   block target, top
 
 # App scripts
-namespace "Medtrak", (exports) ->
-
-  exports.navbarInfo = ->
-
-    cancel = $(".request-info-cancel")
-    collapse = $(".navbar-info-collapse")
-    input = collapse.find(".request-info-input").first()
-    toggle = $(".navbar-info-toggle")
-
-    toggle.on "click", (e) ->
-      e.preventDefault()
-      collapse.addClass "js--visible"
-      input.focus()
-      return
-
-    cancel.on "click", (e) ->
-      e.preventDefault()
-      input.blur()
-      collapse.removeClass "js--visible"
-      return
-
-    return
-
-  exports.responsiveVideos = (wrappers = $(".video-embed")) ->
-    wrappers.fitVids()
-    return
-
-  exports.videoMasks = (masks = $(".video-mask")) ->
-    masks.on "click", (e) ->
-      e.preventDefault()
-      mask = $(this)
-      mask.fadeOut(300)
-      return
-    return
+namespace "App", (exports) ->
 
   # Initialization scripts
   (exports.init = ->
     $("html").removeClass "no-js"
-    Medtrak.navbarInfo()
-    Medtrak.responsiveVideos()
-    Medtrak.videoMasks()
     return
   )()
 
