@@ -1,11 +1,7 @@
-<div class="site-footer page-section bg--light">
+<div class="site-footer">
   <div class="container">
 
-    <p class="company-info">
-      <span class="company-info-name">{{ company.legalName ?: siteName }}</span><br>
-      <span class="company-info-address">{{ company.mailingAddress | nl2br }}</span><br>
-      <span class="company-info-phone">{{ company.phoneNumber }}</span>
-    </p>
+    <p class="copyright">&copy; {{ now | date('Y') }} {{ siteName }}. All rights reserved.</p>
 
   </div>
 </div>
