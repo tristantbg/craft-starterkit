@@ -7,7 +7,11 @@
     "name": "Ray Brown",
     "url": "http://bitmanic.com/"
   },
-  "license": "Copyright 2015 Bitmanic",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:bitmanic/craft_boilerplate.git"
+  },
+  "license": "MIT",
   "devDependencies": {
     "grunt": "~0.4.5",
     "grunt-contrib-clean": "~0.6.0",
