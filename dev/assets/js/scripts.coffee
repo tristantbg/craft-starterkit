@@ -11,9 +11,15 @@ namespace = (target, name, block) ->
 # App scripts
 namespace "App", (exports) ->
 
+  # Example function
+  exports.hello = (subject = "world") ->
+    console.log "Hello, " + subject + "."
+    return
+
   # Initialization scripts
   (exports.init = ->
     $("html").removeClass "no-js"
+    App.hello("there")
     return
   )()
 
