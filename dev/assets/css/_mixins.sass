@@ -67,6 +67,10 @@
       @media (max-width: 1199px)
         @content
 
+    @else if $query == xsu
+      @media (min-width: 481px)
+        @content
+
     @else if $query == smu
       @media (min-width: 768px)
         @content
