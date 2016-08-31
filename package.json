@@ -4,11 +4,11 @@
   "description": "A boilerplate for Craft CMS firstly built by Bitmanic.",
   "version": "0.0.3",
   "author": {
-    "name": "Tristan Bagot",
+    "name": "Tristan Bagot"
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:tristantbg/craft-starterkit.git"
+    "url": "git@github.com:bitmanic/craft_boilerplate.git"
   },
   "license": "MIT",
   "devDependencies": {
