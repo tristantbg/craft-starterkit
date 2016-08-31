@@ -1,15 +1,14 @@
 {
   "name": "craft_boilerplate",
-  "title": "Craft CMS Boilerplate",
-  "description": "A boilerplate for Craft CMS built by Bitmanic.",
+  "title": "Craft StarterKit",
+  "description": "A boilerplate for Craft CMS firstly built by Bitmanic.",
   "version": "0.0.3",
   "author": {
-    "name": "Ray Brown",
-    "url": "http://bitmanic.com/"
+    "name": "Tristan Bagot",
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:bitmanic/craft_boilerplate.git"
+    "url": "git@github.com:tristantbg/craft-starterkit.git"
   },
   "license": "MIT",
   "devDependencies": {
