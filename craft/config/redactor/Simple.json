@@ -1,4 +1,3 @@
 {
-	buttons: ['bold', 'italic'],
-	toolbarFixedBox: true
+	"buttons": ["bold","italic"]
 }

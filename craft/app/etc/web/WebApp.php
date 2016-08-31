@@ -54,8 +54,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.etc.web
  * @since     1.0
  */
@@ -114,13 +114,28 @@ class WebApp extends \CWebApplication
 		// Attach our Craft app behavior.
 		$this->attachBehavior('AppBehavior', new AppBehavior());
 
-		// Initialize Cache, HttpRequestService and LogRouter right away (order is important)
-		$this->getComponent('cache');
-		$this->getComponent('request');
+		// If there is a custom validationKey set, apply it here.
+		if ($validationKey = $this->config->get('validationKey'))
+		{
+			$this->security->setValidationKey($validationKey);
+
+			// Make sure any instances of Yii's CSecurityManager class are using the custom validation
+			// key as well
+			$this->getComponent('securityManager')->setValidationKey($validationKey);
+		}
 
 		// Attach our own custom Logger
 		Craft::setLogger(new Logger());
 
+		// If there is a custom appId set, apply it here.
+		if ($appId = $this->config->get('appId'))
+		{
+			$this->setId($appId);
+		}
+
+		// Initialize Cache, HttpRequestService and LogRouter right away (order is important)
+		$this->getComponent('cache');
+		$this->getComponent('request');
 		$this->getComponent('log');
 
 		// So we can try to translate Yii framework strings
@@ -129,11 +144,8 @@ class WebApp extends \CWebApplication
 		// Set our own custom runtime path.
 		$this->setRuntimePath($this->path->getRuntimePath());
 
-		// If there is a custom appId set, apply it here.
-		if ($appId = $this->config->get('appId'))
-		{
-			$this->setId($appId);
-		}
+		// Set the edition components
+		$this->_setEditionComponents();
 
 		parent::init();
 	}
@@ -146,11 +158,13 @@ class WebApp extends \CWebApplication
 	 */
 	public function processRequest()
 	{
-		// If this is a resource request, we should respond with the resource ASAP
+		// If this is a resource request, we should respond with the resource ASAP.
 		$this->_processResourceRequest();
 
+		$configService = $this->config;
+
 		// If we're not in devMode, or it's a 'dontExtendSession' request, we're going to remove some logging routes.
-		if (!$this->config->get('devMode') || (craft()->isInstalled() && !$this->userSession->shouldExtendSession()))
+		if (!$configService->get('devMode') || (craft()->isInstalled() && !$this->userSession->shouldExtendSession()))
 		{
 			$this->log->removeRoute('WebLogRoute');
 			$this->log->removeRoute('ProfileLogRoute');
@@ -167,6 +181,19 @@ class WebApp extends \CWebApplication
 		if ($this->request->isCpRequest())
 		{
 			HeaderHelper::setHeader(array('X-Robots-Tag' => 'none'));
+			HeaderHelper::setHeader(array('X-Frame-Options' => 'SAMEORIGIN'));
+			HeaderHelper::setHeader(array('X-Content-Type-Options' => 'nosniff'));
+		}
+
+		// Send the X-Powered-By header?
+		if ($configService->get('sendPoweredByHeader'))
+		{
+			HeaderHelper::setHeader(array('X-Powered-By' => 'Craft CMS'));
+		}
+		else
+		{
+			// In case PHP is already setting one
+			HeaderHelper::removeHeader('X-Powered-By');
 		}
 
 		// Validate some basics on the database configuration file.
@@ -184,16 +211,16 @@ class WebApp extends \CWebApplication
 		// Check if the app path has changed.  If so, run the requirements check again.
 		$this->_processRequirementsCheck();
 
-		// Makes sure that the uploaded files are compatible with the current DB schema
+		// Makes sure that the uploaded files are compatible with the current database schema
 		if (!$this->updates->isSchemaVersionCompatible())
 		{
 			if ($this->request->isCpRequest())
 			{
 				$version = $this->getVersion();
 				$build = $this->getBuild();
-				$url = "http://download.buildwithcraft.com/craft/{$version}/{$version}.{$build}/Craft-{$version}.{$build}.zip";
+				$url = "https://download.craftcdn.com/craft/{$version}/{$version}.{$build}/Craft-{$version}.{$build}.zip";
 
-				throw new HttpException(200, Craft::t('Craft does not support backtracking to this version. Please upload Craft {url} or later.', array(
+				throw new HttpException(200, Craft::t('Craft CMS does not support backtracking to this version. Please upload Craft CMS {url} or later.', array(
 					'url' => '['.$build.']('.$url.')',
 				)));
 			}
@@ -202,9 +229,6 @@ class WebApp extends \CWebApplication
 				throw new HttpException(503);
 			}
 		}
-
-		// Set the edition components
-		$this->_setEditionComponents();
 
 		// isCraftDbMigrationNeeded will return true if we're in the middle of a manual or auto-update for Craft itself.
 		// If we're in maintenance mode and it's not a site request, show the manual update template.
@@ -308,7 +332,7 @@ class WebApp extends \CWebApplication
 	 */
 	public function createController($route, $owner = null)
 	{
-		if (($route = trim($route, '/')) === '')
+		if ((array)$route === $route || ($route = trim($route, '/')) === '')
 		{
 			$route = $this->defaultController;
 		}
@@ -624,6 +648,43 @@ class WebApp extends \CWebApplication
 		return false;
 	}
 
+	// Events
+	// =========================================================================
+
+	/**
+	 * Fires an onEditionChange event.
+	 *
+	 * @param Event $event
+	 *
+	 * @throws \CException
+	 */
+	public function onEditionChange(Event $event)
+	{
+		$this->raiseEvent('onEditionChange', $event);
+	}
+
+	/**
+	 * @todo Remove for Craft 3.
+	 *
+	 * @param int    $code The level of the error raised.
+	 * @param string $message The error message.
+	 * @param string $file The filename that the error was raised in.
+	 * @param int    $line The line number the error was raised at.
+	 */
+	public function handleError($code, $message, $file, $line)
+	{
+		// PHP 7 turned some E_STRICT messages to E_WARNINGs. Code 2 is for all warnings
+		// and since there are no messages specific codes we have to parse the string for what
+		// we're looking for. Lame, but it works since all PHP error messages are always in English.
+		// https://stackoverflow.com/questions/11556375/is-there-a-way-to-localize-phps-error-output
+		if (version_compare(PHP_VERSION, '7', '>=') && $code === 2 && strpos($message, 'should be compatible with') !== false)
+		{
+			return;
+		}
+
+		parent::handleError($code, $message, $file, $line);
+	}
+
 	// Private Methods
 	// =========================================================================
 
@@ -731,10 +792,10 @@ class WebApp extends \CWebApplication
 				$url = UrlHelper::getUrl('install');
 				$this->request->redirect($url);
 			}
-			// Otherwise return a 404
+			// Otherwise return a 503
 			else
 			{
-				throw new HttpException(404);
+				throw new HttpException(503);
 			}
 		}
 	}
@@ -808,9 +869,6 @@ class WebApp extends \CWebApplication
 
 			if ($cachedAppPath === false || $cachedAppPath !== $appPath)
 			{
-				// Flush the data cache, so we're not getting cached CP resource paths.
-				craft()->cache->flush();
-
 				$this->runController('templates/requirementscheck');
 			}
 		}
@@ -838,8 +896,8 @@ class WebApp extends \CWebApplication
 			{
 				if ($this->updates->isBreakpointUpdateNeeded())
 				{
-					throw new HttpException(200, Craft::t('You need to be on at least Craft {url} before you can manually update to Craft {targetVersion} build {targetBuild}.', array(
-						'url'           => '<a href="'.CRAFT_MIN_BUILD_URL.'">build '.CRAFT_MIN_BUILD_REQUIRED.'</a>',
+					throw new HttpException(200, Craft::t('You need to be on at least Craft CMS {url} before you can manually update to Craft CMS {targetVersion} build {targetBuild}.', array(
+						'url'           => '[build '.CRAFT_MIN_BUILD_REQUIRED.']('.CRAFT_MIN_BUILD_URL.')',
 						'targetVersion' => CRAFT_VERSION,
 						'targetBuild'   => CRAFT_BUILD
 					)));
@@ -931,7 +989,10 @@ class WebApp extends \CWebApplication
 
 			// Special case because we hide the cpTrigger in emails.
 			$this->request->getPath() === craft()->config->get('actionTrigger').'/users/setpassword' ||
-			$this->request->getPath() === craft()->config->get('actionTrigger').'/users/verifyemail'
+			$this->request->getPath() === craft()->config->get('actionTrigger').'/users/verifyemail' ||
+			// Special case because this might be a request with a user that has "Access the site when the system is off"
+			// permissions and is in the process of logging in while the system is off.
+			$this->request->getActionSegments() == array('users', 'login')
 		)
 		{
 			if ($this->userSession->checkPermission('accessCpWhenSystemIsOff'))

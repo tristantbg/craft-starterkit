@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.fieldtypes
  * @since     1.0
  */
@@ -108,11 +108,11 @@ abstract class BaseFieldType extends BaseSavableComponentType implements IFieldT
 	 */
 	public function getInputHtml($name, $value)
 	{
-		return '<textarea name="'.$name.'">'.$value.'</textarea>';
+		return HtmlHelper::encodeParams('<textarea name="{name}">{value}</textarea>', array('name' => $name, 'value' => $value));
 	}
 
 	/**
-	 * Returns static HTML for the field's value.
+	 * @inheritDoc IFieldType::getStaticHtml()
 	 *
 	 * @param mixed $value
 	 *
@@ -180,6 +180,20 @@ abstract class BaseFieldType extends BaseSavableComponentType implements IFieldT
 	public function getSearchKeywords($value)
 	{
 		return StringHelper::arrayToString($value, ' ');
+	}
+
+	/**
+	 * @inheritDoc IPreviewableFieldType::getTableAttributeHtml()
+	 *
+	 * @param mixed $value
+	 *
+	 * @return string
+	 */
+	public function getTableAttributeHtml($value)
+	{
+		$value = (string) $value;
+
+		return StringHelper::stripHtml($value);
 	}
 
 	/**
@@ -260,17 +274,14 @@ abstract class BaseFieldType extends BaseSavableComponentType implements IFieldT
 	{
 		if (!isset($this->_isFresh))
 		{
-			// If this is for a Matrix block, we're more interested in its owner
-			if (isset($this->element) && $this->element->getElementType() == ElementType::MatrixBlock)
+			if (isset($this->element))
 			{
-				$element = $this->element->getOwner();
+				$this->_isFresh = $this->element->getHasFreshContent();
 			}
 			else
 			{
-				$element = $this->element;
+				$this->_isFresh = true;
 			}
-
-			$this->_isFresh = (!$element || (empty($element->getContent()->id) && !$element->hasErrors()));
 		}
 
 		return $this->_isFresh;

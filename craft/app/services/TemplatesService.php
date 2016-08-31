@@ -9,8 +9,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.services
  * @since     1.0
  */
@@ -18,6 +18,8 @@ class TemplatesService extends BaseApplicationComponent
 {
 	// Properties
 	// =========================================================================
+
+	private static $_elementThumbSizes = array(30, 60, 100, 200);
 
 	/**
 	 * @var
@@ -38,6 +40,16 @@ class TemplatesService extends BaseApplicationComponent
 	 * @var
 	 */
 	private $_objectTemplates;
+
+	/**
+	 * @var string
+	 */
+	private $_templateMode;
+
+	/**
+	 * @var string The root path to look for templates in
+	 */
+	private $_templatesPath;
 
 	/**
 	 * @var
@@ -119,6 +131,17 @@ class TemplatesService extends BaseApplicationComponent
 	 */
 	public function init()
 	{
+		// Set the initial template mode based on whether this is a CP or Site request
+		if (craft()->request->isCpRequest())
+		{
+			$this->setTemplateMode(TemplateMode::CP);
+		}
+		else
+		{
+			$this->setTemplateMode(TemplateMode::Site);
+		}
+
+		// Register the cp.elements.element hook
 		$this->hook('cp.elements.element', array($this, '_getCpElementHtml'));
 	}
 
@@ -128,24 +151,26 @@ class TemplatesService extends BaseApplicationComponent
 	 * @param string $loaderClass The name of the class that should be initialized as the Twig instance’s template
 	 *                            loader. If no class is passed in, {@link TemplateLoader} will be used.
 	 *
-	 * @return \Twig_Environment The Twig Environment instance.
+	 * @return TwigEnvironment The Twig Environment instance.
 	 */
-	public function getTwig($loaderClass = null)
+	public function getTwig($loaderClass = null, $options = array())
 	{
 		if (!$loaderClass)
 		{
 			$loaderClass = __NAMESPACE__.'\\TemplateLoader';
 		}
 
-		if (!isset($this->_twigs[$loaderClass]))
+		$cacheKey = $loaderClass.':'.md5(serialize($options));
+
+		if (!isset($this->_twigs[$cacheKey]))
 		{
 			$loader = new $loaderClass();
-			$options = $this->_getTwigOptions();
+			$options = array_merge($this->_getTwigOptions(), $options);
 
-			$twig = new \Twig_Environment($loader, $options);
+			$twig = new TwigEnvironment($loader, $options);
 
 			$twig->addExtension(new \Twig_Extension_StringLoader());
-			$twig->addExtension(new CraftTwigExtension());
+			$twig->addExtension(new CraftTwigExtension($twig));
 
 			if (craft()->config->get('devMode'))
 			{
@@ -156,13 +181,16 @@ class TemplatesService extends BaseApplicationComponent
 			$timezone = craft()->getTimeZone();
 			$twig->getExtension('core')->setTimezone($timezone);
 
+			// Set our custom parser to support "include" tags using the capture mode
+			$twig->setParser(new TwigParser($twig));
+
+			$this->_twigs[$cacheKey] = $twig;
+
 			// Give plugins a chance to add their own Twig extensions
 			$this->_addPluginTwigExtensions($twig);
-
-			$this->_twigs[$loaderClass] = $twig;
 		}
 
-		return $this->_twigs[$loaderClass];
+		return $this->_twigs[$cacheKey];
 	}
 
 	/**
@@ -195,7 +223,7 @@ class TemplatesService extends BaseApplicationComponent
 
 				if (!$template)
 				{
-					$template = craft()->path->getTemplatesPath().$this->_renderingTemplate;
+					$template = $this->_templatesPath.$this->_renderingTemplate;
 				}
 			}
 
@@ -208,12 +236,14 @@ class TemplatesService extends BaseApplicationComponent
 	 *
 	 * @param mixed $template  The name of the template to load, or a StringTemplate object.
 	 * @param array $variables The variables that should be available to the template.
+	 * @param bool  $safeMode  Whether to limit what's available to in the Twig context
+	 *                         in the interest of security.
 	 *
 	 * @return string The rendered template.
 	 */
-	public function render($template, $variables = array())
+	public function render($template, $variables = array(), $safeMode = false)
 	{
-		$twig = $this->getTwig();
+		$twig = $this->getTwig(null, array('safe_mode' => $safeMode));
 
 		$lastRenderingTemplate = $this->_renderingTemplate;
 		$this->_renderingTemplate = $template;
@@ -241,7 +271,7 @@ class TemplatesService extends BaseApplicationComponent
 		$result = call_user_func_array(array($twigTemplate, 'get'.$macro), $args);
 		$this->_renderingTemplate = $lastRenderingTemplate;
 
-		return $result;
+		return (string) $result;
 	}
 
 	/**
@@ -249,17 +279,20 @@ class TemplatesService extends BaseApplicationComponent
 	 *
 	 * @param string $template  The source template string.
 	 * @param array  $variables Any variables that should be available to the template.
+	 * @param bool   $safeMode  Whether to limit what's available to in the Twig context
+	 *                          in the interest of security.
 	 *
 	 * @return string The rendered template.
 	 */
-	public function renderString($template, $variables = array())
+	public function renderString($template, $variables = array(), $safeMode = false)
 	{
 		$stringTemplate = new StringTemplate(md5($template), $template);
 
 		$lastRenderingTemplate = $this->_renderingTemplate;
 		$this->_renderingTemplate = 'string:'.$template;
-		$result = $this->render($stringTemplate, $variables);
+		$result = $this->render($stringTemplate, $variables, $safeMode);
 		$this->_renderingTemplate = $lastRenderingTemplate;
+
 		return $result;
 	}
 
@@ -271,10 +304,12 @@ class TemplatesService extends BaseApplicationComponent
 	 *
 	 * @param string $template The source template string.
 	 * @param mixed  $object   The object that should be passed into the template.
+	 * @param bool   $safeMode Whether to limit what's available to in the Twig context
+	 *                         in the interest of security.
 	 *
 	 * @return string The rendered template.
 	 */
-	public function renderObjectTemplate($template, $object)
+	public function renderObjectTemplate($template, $object, $safeMode = false)
 	{
 		// If there are no dynamic tags, just return the template
 		if (strpos($template, '{') === false)
@@ -283,15 +318,17 @@ class TemplatesService extends BaseApplicationComponent
 		}
 
 		// Get a Twig instance with the String template loader
-		$twig = $this->getTwig('Twig_Loader_String');
+		$twig = $this->getTwig('Twig_Loader_String', array('safe_mode' => $safeMode));
 
 		// Have we already parsed this template?
-		if (!isset($this->_objectTemplates[$template]))
+		$cacheKey = $template.':'.($safeMode ? 'safe' : 'unsafe');
+
+		if (!isset($this->_objectTemplates[$cacheKey]))
 		{
 			// Replace shortcut "{var}"s with "{{object.var}}"s, without affecting normal Twig tags
 			$formattedTemplate = preg_replace('/(?<![\{\%])\{(?![\{\%])/', '{{object.', $template);
 			$formattedTemplate = preg_replace('/(?<![\}\%])\}(?![\}\%])/', '|raw}}', $formattedTemplate);
-			$this->_objectTemplates[$template] = $twig->loadTemplate($formattedTemplate);
+			$this->_objectTemplates[$cacheKey] = $twig->loadTemplate($formattedTemplate);
 		}
 
 		// Temporarily disable strict variables if it's enabled
@@ -305,7 +342,7 @@ class TemplatesService extends BaseApplicationComponent
 		// Render it!
 		$lastRenderingTemplate = $this->_renderingTemplate;
 		$this->_renderingTemplate = 'string:'.$template;
-		$result = $this->_objectTemplates[$template]->render(array(
+		$result = $this->_objectTemplates[$cacheKey]->render(array(
 			'object' => $object
 		));
 
@@ -374,7 +411,7 @@ class TemplatesService extends BaseApplicationComponent
 	 */
 	public function includeFootNode($node, $first = false)
 	{
-		craft()->deprecator->log('TemplatesService::includeFootNode()', 'TemplatesService::includeFootNode() has been deprecated. Use includeFootNode() instead.');
+		craft()->deprecator->log('TemplatesService::includeFootNode()', 'TemplatesService::includeFootNode() has been deprecated. Use includeFootHtml() instead.');
 		$this->includeFootHtml($node, $first);
 	}
 
@@ -571,7 +608,7 @@ class TemplatesService extends BaseApplicationComponent
 		{
 			foreach ($this->_cssFiles as $url)
 			{
-				$node = '<link rel="stylesheet" type="text/css" href="'.$url.'"/>';
+				$node = HtmlHelper::encodeParams('<link rel="stylesheet" type="text/css" href="{url}"/>', array('url' => $url));
 				$this->includeHeadHtml($node);
 			}
 
@@ -673,7 +710,7 @@ class TemplatesService extends BaseApplicationComponent
 
 	/**
 	 * Returns the HTML for the CSRF hidden input token.  Used for when the config setting
-	 * [enableCsrfValidation](http://buildwithcraft.com/docs/config-settings#enableCsrfValidation) is set to true.
+	 * [enableCsrfValidation](http://craftcms.com/docs/config-settings#enableCsrfValidation) is set to true.
 	 *
 	 * @return string If 'enabledCsrfProtection' is enabled, the HTML for the hidden input, otherwise an empty string.
 	 */
@@ -764,8 +801,8 @@ class TemplatesService extends BaseApplicationComponent
 	 * - TemplateName/index.twig
 	 *
 	 * If this is a front-end request, the actual list of file extensions and index filenames are configurable via the
-	 * [defaultTemplateExtensions](http://buildwithcraft.com/docs/config-settings#defaultTemplateExtensions) and
-	 * [indexTemplateFilenames](http://buildwithcraft.com/docs/config-settings#indexTemplateFilenames) config settings.
+	 * [defaultTemplateExtensions](http://craftcms.com/docs/config-settings#defaultTemplateExtensions) and
+	 * [indexTemplateFilenames](http://craftcms.com/docs/config-settings#indexTemplateFilenames) config settings.
 	 *
 	 * For example if you set the following in config/general.php:
 	 *
@@ -780,8 +817,8 @@ class TemplatesService extends BaseApplicationComponent
 	 * - TemplateName.htm
 	 * - TemplateName/default.htm
 	 *
-	 * The actual directory that those files will be searched for is whatever {@link PathService::getTemplatesPath()}
-	 * returns (probably craft/templates/ if it’s a front-end site request, and craft/app/templates/ if it’s a Control
+	 * The actual directory that those files will depend on the current  {@link setTemplateMode() template mode}
+	 * (probably craft/templates/ if it’s a front-end site request, and craft/app/templates/ if it’s a Control
 	 * Panel request).
 	 *
 	 * If this is a front-end site request, a folder named after the current locale ID will be checked first.
@@ -831,10 +868,7 @@ class TemplatesService extends BaseApplicationComponent
 		// Normalize the template name
 		$name = trim(preg_replace('#/{2,}#', '/', strtr($name, '\\', '/')), '/');
 
-		// Get the latest template base path
-		$templatesPath = rtrim(craft()->path->getTemplatesPath(), '/').'/';
-
-		$key = $templatesPath.':'.$name;
+		$key = $this->_templatesPath.':'.$name;
 
 		// Is this template path already cached?
 		if (isset($this->_templatePaths[$key]))
@@ -849,12 +883,12 @@ class TemplatesService extends BaseApplicationComponent
 		$basePaths = array();
 
 		// Should we be looking for a localized version of the template?
-		if (craft()->request->isSiteRequest() && IOHelper::folderExists($templatesPath.craft()->language))
+		if (craft()->request->isSiteRequest() && IOHelper::folderExists($this->_templatesPath.craft()->language))
 		{
-			$basePaths[] = $templatesPath.craft()->language.'/';
+			$basePaths[] = $this->_templatesPath.craft()->language.'/';
 		}
 
-		$basePaths[] = $templatesPath;
+		$basePaths[] = $this->_templatesPath;
 
 		foreach ($basePaths as $basePath)
 		{
@@ -922,6 +956,80 @@ class TemplatesService extends BaseApplicationComponent
 	}
 
 	/**
+	 * Returns the current template mode (either 'site' or 'cp').
+	 *
+	 * @return string Either 'site' or 'cp'.
+	 */
+	public function getTemplateMode()
+	{
+		return $this->_templateMode;
+	}
+
+	/**
+	 * Sets the current template mode.
+	 *
+	 * The template mode defines:
+	 *
+	 * - the base path that templates should be looked for in
+	 * - the default template file extensions that should be automatically added when looking for templates
+	 * - the "index" template filenames that sholud be checked when looking for templates
+	 *
+	 * @param string $templateMode Either 'site' or 'cp'
+	 *
+	 * @return void
+	 * @throws Exception if $templateMode is invalid
+	 */
+	public function setTemplateMode($templateMode)
+	{
+		// Validate
+		if (!in_array($templateMode, array(TemplateMode::Site, TemplateMode::CP)))
+		{
+			throw new Exception('"'.$templateMode.'" is not a valid template mode');
+		}
+
+		// Set the new template mode
+		$this->_templateMode = $templateMode;
+
+		// Update everything
+		$pathsService = craft()->path;
+
+		if ($templateMode == TemplateMode::CP)
+		{
+			$this->setTemplatesPath($pathsService->getCpTemplatesPath());
+			$this->_defaultTemplateExtensions = array('html', 'twig');
+			$this->_indexTemplateFilenames = array('index');
+		}
+		else
+		{
+			$this->setTemplatesPath($pathsService->getSiteTemplatesPath());
+			$this->_defaultTemplateExtensions = craft()->config->get('defaultTemplateExtensions');
+			$this->_indexTemplateFilenames = craft()->config->get('indexTemplateFilenames');
+		}
+	}
+
+	/**
+	 * Returns the base path that templates should be found in.
+	 *
+	 * @return string
+	 */
+	public function getTemplatesPath()
+	{
+		return $this->_templatesPath;
+	}
+
+	/**
+	 * Sets the base path that templates should be found in.
+	 *
+	 * @param string $templatesPath
+	 *
+	 * @return void
+	 */
+	public function setTemplatesPath($templatesPath)
+	{
+		$this->_templatesPath = rtrim($templatesPath, '/').'/';
+	}
+
+	/**
 	 * Renames HTML input names so they belong to a namespace.
 	 *
 	 * This method will go through the passed-in $html looking for `name=` attributes, and renaming their values such
@@ -966,6 +1074,11 @@ class TemplatesService extends BaseApplicationComponent
 	 */
 	public function namespaceInputs($html, $namespace = null, $otherAttributes = true)
 	{
+		if (!is_string($html) || $html === '')
+		{
+			return '';
+		}
+
 		if ($namespace === null)
 		{
 			$namespace = $this->getNamespace();
@@ -984,7 +1097,7 @@ class TemplatesService extends BaseApplicationComponent
 			if ($otherAttributes)
 			{
 				$idNamespace = $this->formatInputId($namespace);
-				$html = preg_replace('/(?<![\w\-])((id|for|list|data\-target|data\-reverse\-target|data\-target\-prefix)=(\'|")#?)([^\.\'"][^\'"]*)\3/i', '$1'.$idNamespace.'-$4$3', $html);
+				$html = preg_replace('/(?<![\w\-])((id|for|list|aria\-labelledby|data\-target|data\-reverse\-target|data\-target\-prefix)=(\'|")#?)([^\.\'"][^\'"]*)\3/i', '$1'.$idNamespace.'-$4$3', $html);
 			}
 
 			// Bring back the textarea content
@@ -1157,7 +1270,8 @@ class TemplatesService extends BaseApplicationComponent
 		{
 			$this->_twigOptions = array(
 				'base_template_class' => 'Craft\BaseTemplate',
-				'cache'               => craft()->path->getCompiledTemplatesPath(),
+				// See: https://github.com/twigphp/Twig/issues/1951
+				'cache'               => rtrim(craft()->path->getCompiledTemplatesPath(), '/'),
 				'auto_reload'         => true,
 			);
 
@@ -1205,21 +1319,6 @@ class TemplatesService extends BaseApplicationComponent
 		// Normalize the path and name
 		$basePath = rtrim(IOHelper::normalizePathSeparators($basePath), '/').'/';
 		$name = trim(IOHelper::normalizePathSeparators($name), '/');
-
-		// Set the defaultTemplateExtensions and indexTemplateFilenames vars
-		if (!isset($this->_defaultTemplateExtensions))
-		{
-			if (craft()->request->isCpRequest())
-			{
-				$this->_defaultTemplateExtensions = array('html', 'twig');
-				$this->_indexTemplateFilenames = array('index');
-			}
-			else
-			{
-				$this->_defaultTemplateExtensions = craft()->config->get('defaultTemplateExtensions');
-				$this->_indexTemplateFilenames = craft()->config->get('indexTemplateFilenames');
-			}
-		}
 
 		// $name could be an empty string (e.g. to load the homepage template)
 		if ($name)
@@ -1285,7 +1384,18 @@ class TemplatesService extends BaseApplicationComponent
 			{
 				foreach ($pluginExtensions as $extension)
 				{
-					$twig->addExtension($extension);
+					// It's possible for a plugin to register multiple extensions.
+					if (is_array($extension))
+					{
+						foreach ($extension as $innerExtension)
+						{
+							$twig->addExtension($innerExtension);
+						}
+					}
+					else
+					{
+						$twig->addExtension($extension);
+					}
 				}
 			}
 			catch (\LogicException $e)
@@ -1346,59 +1456,79 @@ class TemplatesService extends BaseApplicationComponent
 			$context['context'] = 'index';
 		}
 
-		if (!isset($context['viewMode']))
+		if (isset($context['elementType']))
 		{
-			$context['viewMode'] = 'table';
-		}
-
-		$thumbClass = 'elementthumb'.$context['element']->id;
-		$iconClass = 'elementicon'.$context['element']->id;
-
-		if ($context['viewMode'] == 'thumbs')
-		{
-			$thumbSize = 100;
-			$iconSize = 90;
-			$thumbSelectorPrefix = '.thumbsview ';
+			$elementType = $context['elementType'];
 		}
 		else
 		{
-			$thumbSize = 30;
-			$iconSize = 20;
-			$thumbSelectorPrefix = '';
+			$elementType = craft()->elements->getElementType($context['element']->getElementType());
 		}
 
-		$thumbUrl = $context['element']->getThumbUrl($thumbSize);
+		// How big is the element going to be?
+		if (isset($context['size']) && ($context['size'] == 'small' || $context['size'] == 'large'))
+		{
+			$elementSize = $context['size'];
+		}
+		else if (isset($context['viewMode']) && $context['viewMode'] == 'thumbs')
+		{
+			$elementSize = 'large';
+		}
+		else
+		{
+			$elementSize = 'small';
+		}
+
+		// Create the thumb/icon image, if there is one
+		// ---------------------------------------------------------------------
+
+		$thumbUrl = $context['element']->getThumbUrl(self::$_elementThumbSizes[0]);
 
 		if ($thumbUrl)
 		{
-			$this->includeCss($thumbSelectorPrefix.'.'.$thumbClass." { background-image: url('".$thumbUrl."'); }");
-			$this->includeHiResCss($thumbSelectorPrefix.'.'.$thumbClass." { background-image: url('".$context['element']->getThumbUrl($thumbSize * 2)."'); background-size: ".$thumbSize.'px; }');
+			$srcsets = array();
+
+			foreach (self::$_elementThumbSizes as $i => $size)
+			{
+				if ($i == 0)
+				{
+					$srcset = $thumbUrl;
+				}
+				else
+				{
+					$srcset = $context['element']->getThumbUrl($size);
+				}
+
+				$srcsets[] = $srcset.' '.$size.'w';
+			}
+
+			$imgHtml = '<div class="elementthumb">'.
+				'<img '.
+				'sizes="'.($elementSize == 'small' ? self::$_elementThumbSizes[0] : self::$_elementThumbSizes[2]).'px" '.
+				'srcset="'.implode(', ', $srcsets).'" '.
+				'alt="">'.
+				'</div> ';
 		}
 		else
 		{
-			$iconUrl = $context['element']->getIconUrl($iconSize);
-
-			if ($iconUrl)
-			{
-				$this->includeCss($thumbSelectorPrefix.'.'.$iconClass." { background-image: url('".$iconUrl."'); }");
-				$this->includeHiResCss($thumbSelectorPrefix.'.'.$iconClass." { background-image: url('".$context['element']->getIconUrl($iconSize * 2)."); background-size: ".$iconSize.'px; }');
-			}
+			$imgHtml = '';
 		}
 
-		$html = '<div class="element';
+		$html = '<div class="element '.$elementSize;
 
 		if ($context['context'] == 'field')
 		{
 			$html .= ' removable';
 		}
 
+		if ($elementType->hasStatuses())
+		{
+			$html .= ' hasstatus';
+		}
+
 		if ($thumbUrl)
 		{
 			$html .= ' hasthumb';
-		}
-		else if ($iconUrl)
-		{
-			$html .= ' hasicon';
 		}
 
 		$label = HtmlHelper::encode($context['element']);
@@ -1425,36 +1555,20 @@ class TemplatesService extends BaseApplicationComponent
 			$html .= '<a class="delete icon" title="'.Craft::t('Remove').'"></a> ';
 		}
 
-		if ($thumbUrl)
-		{
-			$html .= '<div class="elementthumb '.$thumbClass.'"></div> ';
-		}
-		else if ($iconUrl)
-		{
-			$html .= '<div class="elementicon '.$iconClass.'"></div> ';
-		}
-
-		$html .= '<div class="label">';
-
-		if (isset($context['elementType']))
-		{
-			$elementType = $context['elementType'];
-		}
-		else
-		{
-			$elementType = craft()->elements->getElementType($context['element']->getElementType());
-		}
-
 		if ($elementType->hasStatuses())
 		{
 			$html .= '<span class="status '.$context['element']->getStatus().'"></span>';
 		}
 
+		$html .= $imgHtml;
+		$html .= '<div class="label">';
+
 		$html .= '<span class="title">';
 
 		if ($context['context'] == 'index' && ($cpEditUrl = $context['element']->getCpEditUrl()))
 		{
-			$html .= '<a href="'.$cpEditUrl.'">'.$label.'</a>';
+			$cpEditUrl = HtmlHelper::encode($cpEditUrl);
+			$html .= "<a href=\"{$cpEditUrl}\">{$label}</a>";
 		}
 		else
 		{

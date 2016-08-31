@@ -1,15 +1,15 @@
 <?php
 namespace Craft;
 
-craft()->requireEdition(Craft::Pro);
+craft()->requireEdition(Craft::Client);
 
 /**
  * Class UserPermissionsService
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.services
  * @since     1.0
  */
@@ -52,7 +52,7 @@ class UserPermissionsService extends BaseApplicationComponent
 						'label' => Craft::t('Access the CP when the system is off')
 					),
 					'performUpdates' => array(
-						'label' => Craft::t('Perform Craft and plugin updates')
+						'label' => Craft::t('Perform Craft CMS and plugin updates')
 					),
 				)
 			),
@@ -73,30 +73,33 @@ class UserPermissionsService extends BaseApplicationComponent
 		// Users
 		// ---------------------------------------------------------------------
 
-		$permissions[Craft::t('Users')] = array(
-			'editUsers' => array(
-				'label' => Craft::t('Edit users'),
-				'nested' => array(
-					'registerUsers' => array(
-						'label' => Craft::t('Register users')
+		if (craft()->getEdition() == Craft::Pro)
+		{
+			$permissions[Craft::t('Users')] = array(
+				'editUsers' => array(
+					'label' => Craft::t('Edit users'),
+					'nested' => array(
+						'registerUsers' => array(
+							'label' => Craft::t('Register users')
+						),
+						'assignUserPermissions' => array(
+							'label' => Craft::t('Assign user groups and permissions')
+						),
+						'administrateUsers' => array(
+							'label' => Craft::t('Administrate users'),
+							'nested' => array(
+								'changeUserEmails' => array(
+									'label' => Craft::t('Change users’ emails')
+								),
+							),
+						),
 					),
-					'assignUserPermissions' => array(
-						'label' => Craft::t('Assign user groups and permissions')
-					),
-					'administrateUsers' => array(
-						'label' => Craft::t('Administrate users'),
-						'nested' => array(
-							'changeUserEmails' => array(
-								'label' => Craft::t('Change users’ emails')
-							)
-						)
-					)
 				),
-			),
-			'deleteUsers' => array(
-				'label' => Craft::t('Delete users')
-			),
-		);
+				'deleteUsers' => array(
+					'label' => Craft::t('Delete users')
+				),
+			);
+		}
 
 		// Locales
 		// ---------------------------------------------------------------------
@@ -537,27 +540,38 @@ class UserPermissionsService extends BaseApplicationComponent
 	 * @param array $groupPermissions
 	 * @param array &$filteredPermissions
 	 *
-	 * @return null
+	 * @return boolean Whether any permissions were added to $filteredPermissions
 	 */
 	private function _findSelectedPermissions($permissionsGroup, $postedPermissions, $groupPermissions, &$filteredPermissions)
 	{
+		$hasAssignedPermissions = false;
+
 		foreach ($permissionsGroup as $name => $data)
 		{
-			// Was this permission in the post data, or do they already have it via their group?
+			// Should the user have this permission (either directly or via their group)?
 			if (($inPostedPermissions = in_array($name, $postedPermissions)) || in_array(strtolower($name), $groupPermissions))
 			{
-				// If it was in the post data, give it to them directly now
-				if ($inPostedPermissions)
-				{
-					$filteredPermissions[] = $name;
-				}
-
+				// First assign any nested permissions
 				if (!empty($data['nested']))
 				{
-					$this->_findSelectedPermissions($data['nested'], $postedPermissions, $groupPermissions, $filteredPermissions);
+					$hasAssignedNestedPermissions = $this->_findSelectedPermissions($data['nested'], $postedPermissions, $groupPermissions, $filteredPermissions);
+				}
+				else
+				{
+					$hasAssignedNestedPermissions = false;
+				}
+
+				// Were they assigned this permission (or any of its nested permissions) directly?
+				if ($inPostedPermissions || $hasAssignedNestedPermissions)
+				{
+					// Assign the permission directly to the user
+					$filteredPermissions[] = $name;
+					$hasAssignedPermissions = true;
 				}
 			}
 		}
+
+		return $hasAssignedPermissions;
 	}
 
 	/**

@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.fieldtypes
  * @since     1.2
  */
@@ -74,12 +74,23 @@ class TagsFieldType extends BaseElementFieldType
 				'elements'        => $criteria,
 				'tagGroupId'      => $this->_getTagGroupId(),
 				'sourceElementId' => (isset($this->element->id) ? $this->element->id : null),
+				'selectionLabel'  => Craft::t($this->getSettings()->selectionLabel),
 			));
 		}
 		else
 		{
 			return '<p class="error">'.Craft::t('This field is not set to a valid source.').'</p>';
 		}
+	}
+
+	/**
+	 * @inheritDoc BaseElementFieldType::getAddButtonLabel()
+	 *
+	 * @return string
+	 */
+	protected function getAddButtonLabel()
+	{
+		return Craft::t('Add a tag');
 	}
 
 	// Private Methods

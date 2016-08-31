@@ -132,9 +132,8 @@ module.exports = (grunt) ->
       options:
         loadPath: ['bower']
         style: 'compressed'
+        compass: true
       styles:
-        options:
-          compass: true
         files: [
           expand: true
           cwd: '<%= path.dev %>/assets/css'

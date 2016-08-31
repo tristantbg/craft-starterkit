@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.models
  * @since     1.0
  */
@@ -54,7 +54,7 @@ class FieldLayoutModel extends BaseModel
 	/**
 	 * Returns the layout’s fields.
 	 *
-	 * @return FieldModel[] The layout’s fields.
+	 * @return FieldLayoutFieldModel[] The layout’s fields.
 	 */
 	public function getFields()
 	{
@@ -62,7 +62,7 @@ class FieldLayoutModel extends BaseModel
 		{
 			if ($this->id)
 			{
-				$this->_fields = craft()->fields->getLayoutFieldsById($this->id);
+				$this->_fields = craft()->fields->getOrderedLayoutFieldsById($this->id);
 			}
 			else
 			{

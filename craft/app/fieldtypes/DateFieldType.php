@@ -6,12 +6,12 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.fieldtypes
  * @since     1.0
  */
-class DateFieldType extends BaseFieldType
+class DateFieldType extends BaseFieldType implements IPreviewableFieldType
 {
 	// Public Methods
 	// =========================================================================
@@ -100,41 +100,60 @@ class DateFieldType extends BaseFieldType
 
 		$input = '';
 
-		// In case nothing is selected, default to the date.
-		if (!$this->getSettings()->showDate && !$this->getSettings()->showTime)
+		$showTime = $this->getSettings()->showTime;
+		$showDate = (!$showTime || $this->getSettings()->showDate);
+
+		if ($showDate && $showTime)
 		{
-			$this->getSettings()->showDate = true;
+			$input .= '<div class="datetimewrapper">';
 		}
 
-		if ($this->getSettings()->showDate)
+		if ($showDate)
 		{
 			$input .= craft()->templates->render('_includes/forms/date', $variables);
 		}
 
-		if ($this->getSettings()->showTime)
+		if ($showTime)
 		{
 			$input .= ' '.craft()->templates->render('_includes/forms/time', $variables);
+		}
+
+		if ($showDate && $showTime)
+		{
+			$input .= '</div>';
 		}
 
 		return $input;
 	}
 
 	/**
-	 * @inheritDoc IFieldType::prepValue()
+	 * @inheritDoc IFieldType::prepValueFromPost()
 	 *
 	 * @param mixed $value
 	 *
-	 * @return DateTime
+	 * @return mixed
 	 */
-	public function prepValue($value)
+	public function prepValueFromPost($value)
+	{
+		return DateTime::createFromString($value, craft()->getTimeZone());
+	}
+
+	/**
+	 * @inheritDoc IPreviewableFieldType::getTableAttributeHtml()
+	 *
+	 * @param mixed $value
+	 *
+	 * @return string
+	 */
+	public function getTableAttributeHtml($value)
 	{
 		if ($value)
 		{
-			// Set it to the system timezone
-			$timezone = craft()->getTimeZone();
-			$value->setTimezone(new \DateTimeZone($timezone));
-
-			return $value;
+			return '<span title="'.$value->localeDate().' '.$value->localeTime().'">'.$value->uiTimestamp().'</span>';
+		}
+		else
+		{
+			return '';
 		}
 	}
 

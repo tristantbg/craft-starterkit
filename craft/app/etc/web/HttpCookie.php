@@ -7,8 +7,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.etc.web
  * @since     2.2
  */
@@ -29,6 +29,16 @@ class HttpCookie extends \CHttpCookie
 		if (($defaultCookieDomain = craft()->config->get('defaultCookieDomain')) !== '')
 		{
 			$this->domain = $defaultCookieDomain;
+		}
+
+		$this->httpOnly = true;
+
+		$secureCookies = craft()->config->get('useSecureCookies');
+
+		// If it's set to auto and a secure connection or it's set to true, set the secure flag.
+		if (($secureCookies === 'auto' && craft()->request->isSecureConnection()) || $secureCookies === true)
+		{
+			$this->secure = true;
 		}
 
 		parent::__construct($name, $value, $options);

@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.etc.i18n
  * @since     1.0
  */
@@ -34,6 +34,11 @@ class PhpMessageSource extends \CPhpMessageSource
 	 * @var array
 	 */
 	private $_messages = array();
+
+	/**
+	 * @var array
+	 */
+	private $_missingYiiTranslationFiles = array();
 
 	// Public Methods
 	// ------------------------------------------------------------------------
@@ -62,7 +67,8 @@ class PhpMessageSource extends \CPhpMessageSource
 	{
 		if ($category !== 'craft')
 		{
-			$parentMessages = parent::loadMessages($category, $language);
+			// Modified version of parent::loadMessages()
+			$parentMessages = $this->_loadMessages($category, $language);
 
 			// See if there any craft/translations for Yii's system messages.
 			if (($filePath = IOHelper::fileExists(craft()->path->getSiteTranslationsPath().$language.'.php')) !== false)
@@ -105,6 +111,12 @@ class PhpMessageSource extends \CPhpMessageSource
 			$translationFiles = array();
 			$parts = explode('_', $language);
 			$totalParts = count($parts);
+
+			// If it's Norwegian Bokmål/Nynorsk, add plain ol' Norwegian as a fallback
+			if ($parts[0] === 'nb' || $parts[0] === 'nn')
+			{
+				$translationFiles[] = 'no';
+			}
 
 			for ($i = 1; $i <= $totalParts; $i++)
 			{
@@ -154,7 +166,7 @@ class PhpMessageSource extends \CPhpMessageSource
 	 */
 	private function _processFrameworkData($localeId)
 	{
-		$wideMonthKeys = array('January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December');
+		$wideMonthKeys = array('January', 'February', 'March', 'April', 'May-W', 'June', 'July', 'August', 'September', 'October', 'November', 'December');
 		$abbreviatedMonthKeys = array('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
 		$wideWeekdayNameKeys = array('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday');
 		$abbreviatedWeekdayNameKeys = array('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
@@ -172,11 +184,61 @@ class PhpMessageSource extends \CPhpMessageSource
 		$amName = $locale->getAMName();
 		$pmName = $locale->getPMName();
 
-		$formattedFrameworkData['AM'] = $amName;
-		$formattedFrameworkData['am'] = $amName;
-		$formattedFrameworkData['PM'] = $pmName;
-		$formattedFrameworkData['pm'] = $pmName;
+		$formattedFrameworkData['AM'] = StringHelper::toUpperCase($amName);
+		$formattedFrameworkData['am'] = StringHelper::toLowerCase($amName);
+		$formattedFrameworkData['PM'] = StringHelper::toUpperCase($pmName);
+		$formattedFrameworkData['pm'] = StringHelper::toLowerCase($pmName);
 
 		return $formattedFrameworkData;
+	}
+
+	/**
+	 * A slightly modified version of CPhpMessageSource->loadMessages()
+	 *
+	 * @param $category
+	 * @param $language
+	 *
+	 * @return array|mixed
+	 */
+	private function _loadMessages($category, $language)
+	{
+		$messageFile = $this->getMessageFile($category, $language);
+
+		if ($this->cachingDuration > 0 && $this->cacheID !== false && ($cache = craft()->getComponent($this->cacheID)) !== null)
+		{
+			$key = self::CACHE_KEY_PREFIX.$messageFile;
+
+			if (($data = $cache->get($key)) !== false)
+			{
+				return unserialize($data);
+			}
+		}
+
+		if (!in_array($messageFile, $this->_missingYiiTranslationFiles))
+		{
+			if (IOHelper::fileExists($messageFile))
+			{
+				$messages = include($messageFile);
+
+				if (!is_array($messages))
+				{
+					$messages = array();
+				}
+
+				if (isset($cache))
+				{
+					$dependency = new \CFileCacheDependency($messageFile);
+					$cache->set($key, serialize($messages), $this->cachingDuration, $dependency);
+				}
+
+				return $messages;
+			}
+			else
+			{
+				$this->_missingYiiTranslationFiles[] = $messageFile;
+			}
+		}
+
+		return array();
 	}
 }

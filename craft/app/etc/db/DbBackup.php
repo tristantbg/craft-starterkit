@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.etc.db
  * @since     1.0
  */
@@ -93,14 +93,17 @@ class DbBackup
 		}
 
 		$this->_currentVersion = 'v'.craft()->getVersion().'.'.craft()->getBuild();
-		$fileName = IOHelper::cleanFilename(craft()->getSiteName()).'_'.gmdate('ymd_His').'_'.$this->_currentVersion.'.sql';
+		$siteName = IOHelper::cleanFilename(StringHelper::asciiString(craft()->getSiteName()));
+		$fileName = ($siteName ? $siteName.'_' : '').gmdate('ymd_His').'_'.$this->_currentVersion.'.sql';
 		$this->_filePath = craft()->path->getDbBackupPath().StringHelper::toLowerCase($fileName);
 
 		$this->_processHeader();
 
-		foreach (craft()->db->getSchema()->getTables() as $resultName => $val)
+		$tableNames = craft()->db->getSchema()->getTableNames();
+
+		foreach ($tableNames as $tableName)
 		{
-			$this->_processResult($resultName);
+			$this->_processResult($tableName);
 		}
 
 		$this->_processConstraints();
@@ -125,20 +128,34 @@ class DbBackup
 			throw new Exception(Craft::t('Could not find the SQL file to restore: {filePath}', array('filePath' => $filePath)));
 		}
 
-		$this->_nukeDb();
-
 		$sql = IOHelper::getFileContents($filePath, true);
 
-		array_walk($sql, array($this, 'trimValue'));
-		$sql = array_filter($sql);
-
-		$statements = $this->_buildSQLStatements($sql);
-
-		foreach ($statements as $key => $statement)
+		if ($sql)
 		{
-			Craft::log('Executing SQL statement: '.$statement);
-			$command = craft()->db->createCommand($statement);
-			$command->execute();
+			array_walk($sql, [$this, 'trimValue']);
+			$sql = array_filter($sql);
+
+			$statements = $this->_buildSQLStatements($sql);
+
+			if (!empty($statements))
+			{
+				$this->_nukeDb();
+
+				foreach ($statements as $key => $statement)
+				{
+					Craft::log('Executing SQL statement: '.$statement, LogLevel::Info, true);
+					$statement = craft()->db->getPdoInstance()->prepare($statement);
+					$statement->execute();
+				}
+			}
+			else
+			{
+				Craft::log('Could not parse any SQL statements from the database backup file: '.$filePath, LogLevel::Info, true);
+			}
+		}
+		else
+		{
+			Craft::log('Tried to restore database from a backup, but the file is empty: '.$filePath, LogLevel::Info, true);
 		}
 
 		// Re-enable.
@@ -388,14 +405,14 @@ class DbBackup
 				// Data!
 				IOHelper::writeToFile($this->_filePath, PHP_EOL . '--' . PHP_EOL . '-- Data for table `' . $tableName . '`' . PHP_EOL . '--' . PHP_EOL . PHP_EOL, true, true);
 
-				$batchSize = 1000;
+				$batchSize = 100;
 
 				// Going to grab the data in batches.
 				$totalBatches = ceil($totalRows / $batchSize);
 
 				for ($counter = 0; $counter < $totalBatches; $counter++)
 				{
-					@set_time_limit(120);
+					@set_time_limit(240);
 
 					$offset = $batchSize * $counter;
 					$rows = craft()->db->createCommand('SELECT * FROM ' . craft()->db->quoteTableName($tableName) . ' LIMIT ' . $offset . ',' . $batchSize . ';')->queryAll();
@@ -404,26 +421,33 @@ class DbBackup
 					{
 						$attrs = array_map(array(craft()->db, 'quoteColumnName'), array_keys($rows[0]));
 
-						foreach ($rows as $row)
-						{
-							$insertStatement = 'INSERT INTO ' . craft()->db->quoteTableName($tableName) . ' (' . implode(', ', $attrs) . ') VALUES';
+						$insertStatement = 'INSERT INTO ' . craft()->db->quoteTableName($tableName) . ' (' . implode(', ', $attrs) . ') VALUES'.PHP_EOL;
 
+						foreach ($rows as $key => $row)
+						{
 							// Process row
 							foreach ($row as $columnName => $value)
 							{
 								if ($value === null)
 								{
-									$row[$columnName] = 'NULL';
+									$rows[$key][$columnName] = 'NULL';
 								}
 								else
 								{
-									$row[$columnName] = craft()->db->getPdoInstance()->quote($value);
+									$rows[$key][$columnName] = craft()->db->getPdoInstance()->quote($value);
 								}
 							}
-
-							$insertStatement .= ' ('.implode(', ', $row).');';
-							IOHelper::writeToFile($this->_filePath, $insertStatement . PHP_EOL, true, true);
 						}
+
+						foreach ($rows as $row)
+						{
+							$insertStatement .= ' ('.implode(', ', $row).'),'.PHP_EOL;
+						}
+
+						// Nuke that last comma and add a ;
+						$insertStatement = mb_substr($insertStatement, 0, -mb_strlen(PHP_EOL) -1).';';
+
+						IOHelper::writeToFile($this->_filePath, $insertStatement . PHP_EOL, true, true);
 					}
 				}
 

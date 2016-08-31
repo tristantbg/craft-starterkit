@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.etc.db.schemas
  * @since     1.0
  */
@@ -193,18 +193,35 @@ class MysqlSchema extends \CMysqlSchema
 	public function createTable($table, $columns, $options = null, $engine = 'InnoDb')
 	{
 		$cols = array();
+		$primaryKeys = array();
+
 		$options = 'ENGINE='.$engine.' DEFAULT CHARSET='.craft()->config->get('charset', ConfigFile::Db).' COLLATE='.craft()->config->get('collation', ConfigFile::Db).($options ? ' '.$options : '');
 
 		foreach ($columns as $name => $type)
 		{
 			if (is_string($name))
 			{
-				$cols[] = "\t".$this->quoteColumnName($name).' '.$this->getColumnType($type);
+				$columnType = $this->getColumnType($type);
+
+				if ($type == ColumnType::PK || strpos($columnType, ' PRIMARY KEY') !== false)
+				{
+					$primaryKeys[] = $name;
+
+					// TODO: Probably MySQL specific, but no an issue in Craft 3 anyway.
+					$columnType = str_replace(' PRIMARY KEY', '', $columnType);
+				}
+
+				$cols[] = "\t".$this->quoteColumnName($name).' '.$columnType;
 			}
 			else
 			{
 				$cols[] = "\t".$type;
 			}
+		}
+
+		if ($primaryKeys)
+		{
+			$cols[] = "\tPRIMARY KEY (".implode(', ', $primaryKeys).")";
 		}
 
 		$sql = "CREATE TABLE ".$this->quoteTableName($table)." (\n".implode(",\n", $cols)."\n)";
@@ -260,7 +277,7 @@ class MysqlSchema extends \CMysqlSchema
 	{
 		$sql = 'UPDATE '.$this->quoteTableName($table).' SET '.$this->quoteColumnName($column).' = REPLACE('.$this->quoteColumnName($column).',  :find, :replace)';
 		$params = array(':find' => (string) $find, ':replace' => (string) $replace);
-		
+
 		return array('query' => $sql, 'params' => $params);
 	}
 

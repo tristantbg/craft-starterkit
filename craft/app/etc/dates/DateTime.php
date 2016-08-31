@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.etc.dates
  * @since     1.0
  */
@@ -82,22 +82,24 @@ class DateTime extends \DateTime
 	 *  - Unix timestamps
 	 *
 	 * @param string|array $date
-	 * @param string|null  $timezone The [PHP timezone identifier](http://php.net/manual/en/timezones.php),
-	 *                               if not specified in $date. Defaults to 'UTC'.
+	 * @param string|null  $timezone            The [PHP timezone identifier](http://php.net/manual/en/timezones.php)
+	 *                                          that $date is set to, if not already specified in $date. Defaults to 'UTC'.
+	 * @param bool         $setToSystemTimeZone Whether to set the resulting DateTime object to the system timezone.
 	 *
 	 * @return DateTime|null|false
 	 */
-	public static function createFromString($date, $timezone = null)
+	public static function createFromString($date, $timezone = null, $setToSystemTimeZone = true)
 	{
+		// Is this already a DateTime object?
+		if ($date instanceof \DateTime)
+		{
+			return $date;
+		}
+
 		// Was this a date/time-picker?
 		if (is_array($date) && (isset($date['date']) || isset($date['time'])))
 		{
 			$dt = $date;
-
-			if (!$timezone)
-			{
-				$timezone = craft()->getTimeZone();
-			}
 
 			if (empty($dt['date']) && empty($dt['time']))
 			{
@@ -111,6 +113,23 @@ class DateTime extends \DateTime
 			{
 				$date = $dt['date'];
 				$format = $dateFormatter->getDatepickerPhpFormat();
+
+				// Valid separators are either '-', '.' or '/'.
+				if (mb_strpos($format, '.') !== false)
+				{
+					$separator = '.';
+				}
+				else if (mb_strpos($format, '-') !== false)
+				{
+					$separator = '-';
+				}
+				else
+				{
+					$separator = '/';
+				}
+
+				// Ensure that the submitted date is using the locale’s separator
+				$date = str_replace(array('-', '.', '/'), $separator, $date);
 
 				// Check for a two-digit year as well
 				$altFormat = str_replace('Y', 'y', $format);
@@ -126,19 +145,36 @@ class DateTime extends \DateTime
 				$format = '';
 
 				// Default to the current date
-				$current = new DateTime('now', new \DateTimeZone($timezone));
+				$current = new DateTime('now', new \DateTimeZone($timezone ?: self::UTC));
 				$date .= $current->month().'/'.$current->day().'/'.$current->year();
 				$format .= 'n/j/Y';
 			}
 
 			if (!empty($dt['time']))
 			{
+				$timePickerPhpFormat = $dateFormatter->getTimepickerPhpFormat();
+
 				// Replace the localized "AM" and "PM"
 				$localeData = craft()->i18n->getLocaleData();
-				$dt['time'] = str_replace(array($localeData->getAMName(), $localeData->getPMName()), array('AM', 'PM'), $dt['time']);
+
+				if (preg_match('/(.*)('.preg_quote($localeData->getAMName(), '/').'|'.preg_quote($localeData->getPMName(), '/').')(.*)/u', $dt['time'], $matches))
+				{
+					$dt['time'] = $matches[1].$matches[3];
+
+					if ($matches[2] == $localeData->getAMName())
+					{
+						$dt['time'] .= 'AM';
+					}
+					else
+					{
+						$dt['time'] .= 'PM';
+					}
+
+					$timePickerPhpFormat = str_replace('A', '', $timePickerPhpFormat).'A';
+				}
 
 				$date .= ' '.$dt['time'];
-				$format .= ' '.$dateFormatter->getTimepickerPhpFormat();
+				$format .= ' '.$timePickerPhpFormat;
 			}
 		}
 		else
@@ -184,7 +220,7 @@ class DateTime extends \DateTime
 					$date .= ' '.$m['ampm'];
 				}
 			}
-			else if (preg_match('/^\d{10}$/', $date))
+			else if (DateTimeHelper::isValidTimeStamp((int) $date))
 			{
 				$format = 'U';
 			}
@@ -200,7 +236,14 @@ class DateTime extends \DateTime
 			$date   .= ' '.$timezone;
 		}
 
-		return static::createFromFormat('!'.$format, $date);
+		$dt = static::createFromFormat('!'.$format, $date);
+
+		if ($dt !== false && $setToSystemTimeZone)
+		{
+			$dt->setTimezone(new \DateTimeZone(craft()->getTimeZone()));
+		}
+
+		return $dt;
 	}
 
 	/**

@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.helpers
  * @since     1.0
  */
@@ -58,7 +58,7 @@ class UrlHelper
 	}
 
 	/**
-	 * Returns whether a given string appears to be a "full" URL (absolute or root-relative).
+	 * Returns whether a given string appears to be a "full" URL (absolute, root-relative or protocol-relative).
 	 *
 	 * @param string $url
 	 *
@@ -66,7 +66,7 @@ class UrlHelper
 	 */
 	public static function isFullUrl($url)
 	{
-		return (static::isAbsoluteUrl($url) || static::isRootRelativeUrl($url));
+		return (static::isAbsoluteUrl($url) || static::isRootRelativeUrl($url) || static::isProtocolRelativeUrl($url));
 	}
 
 	/**
@@ -113,6 +113,8 @@ class UrlHelper
 	 */
 	public static function getUrlWithToken($url, $token)
 	{
+		$url = static::getUrlWithProtocol($url, static::getProtocolForTokenizedUrl());
+
 		return static::getUrlWithParams($url, array(
 			craft()->config->get('tokenParam') => $token
 		));
@@ -157,7 +159,7 @@ class UrlHelper
 	 *
 	 * @return string
 	 */
-	public static function getUrl($path = '', $params = null, $protocol = '', $mustShowScriptName = false)
+	public static function getUrl($path = '', $params = null, $protocol = null, $mustShowScriptName = false)
 	{
 		// Return $path if it appears to be an absolute URL.
 		if (static::isFullUrl($path))
@@ -188,7 +190,7 @@ class UrlHelper
 		}
 
 		// Send all resources over SSL if this request is loaded over SSL.
-		if ($protocol === '' && craft()->request->isSecureConnection())
+		if (!$protocol && craft()->request->isSecureConnection())
 		{
 			$protocol = 'https';
 		}
@@ -205,7 +207,7 @@ class UrlHelper
 	 *
 	 * @return string
 	 */
-	public static function getCpUrl($path = '', $params = null, $protocol = '')
+	public static function getCpUrl($path = '', $params = null, $protocol = null)
 	{
 		$path = trim($path, '/');
 		$path = craft()->config->get('cpTrigger').($path ? '/'.$path : '');
@@ -219,13 +221,34 @@ class UrlHelper
 	 * @param string $path
 	 * @param array|string|null $params
 	 * @param string|null $protocol
+	 * @param string|null $localeId
 	 *
 	 * @return string
 	 */
-	public static function getSiteUrl($path = '', $params = null, $protocol = '')
+	public static function getSiteUrl($path = '', $params = null, $protocol = null, $localeId = null)
 	{
+		$useLocaleSiteUrl = (
+			$localeId !== null &&
+			($localeId != craft()->language) &&
+			($localeSiteUrl = craft()->config->getLocalized('siteUrl', $localeId))
+		);
+
+		if ($useLocaleSiteUrl)
+		{
+			// Temporarily set Craft to use this element's locale's site URL
+			$siteUrl = craft()->getSiteUrl();
+			craft()->setSiteUrl($localeSiteUrl);
+		}
+
 		$path = trim($path, '/');
-		return static::_getUrl($path, $params, $protocol, false, false);
+		$url = static::_getUrl($path, $params, $protocol, false, false);
+
+		if ($useLocaleSiteUrl)
+		{
+			craft()->setSiteUrl($siteUrl);
+		}
+
+		return $url;
 	}
 
 	/**
@@ -238,7 +261,7 @@ class UrlHelper
 	 *
 	 * @return string
 	 */
-	public static function getResourceUrl($path = '', $params = null, $protocol = '')
+	public static function getResourceUrl($path = '', $params = null, $protocol = null)
 	{
 		$path = trim($path, '/');
 
@@ -291,7 +314,7 @@ class UrlHelper
 	 *
 	 * @return array|string
 	 */
-	public static function getActionUrl($path = '', $params = null, $protocol = '')
+	public static function getActionUrl($path = '', $params = null, $protocol = null)
 	{
 		$path = craft()->config->get('actionTrigger').'/'.trim($path, '/');
 
@@ -319,6 +342,44 @@ class UrlHelper
 		}
 
 		return $url;
+	}
+
+	/**
+	 * Returns what the protocol/schema part of the URL should be (http/https)
+	 * for any tokenized URLs in Craft (email verification links, password reset
+	 * urls, share entry URLs, etc.
+	 *
+	 * @return string
+	 */
+	public static function getProtocolForTokenizedUrl()
+	{
+		$useSslOnTokenizedUrls = craft()->config->get('useSslOnTokenizedUrls');
+
+		// If they've explicitly set `useSslOnTokenizedUrls` to true, use https.
+		if ($useSslOnTokenizedUrls === true)
+		{
+			return 'https';
+		}
+		// If they've explicitly set `useSslOnTokenizedUrls` to false, use http.
+		else if ($useSslOnTokenizedUrls === false)
+		{
+			return 'http';
+		}
+		else
+		{
+			// Let's auto-detect.
+
+			// If the siteUrl is https or the current request is https, use it.
+			$scheme = parse_url(craft()->getSiteUrl(), PHP_URL_SCHEME);
+
+			if (($scheme && strtolower($scheme) == 'https') || craft()->request->isSecureConnection())
+			{
+				return 'https';
+			}
+
+			// Lame ole' http.
+			return 'http';
+		}
 	}
 
 	// Private Methods
@@ -374,7 +435,7 @@ class UrlHelper
 			else
 			{
 				// Figure it out for ourselves, then
-				$baseUrl = craft()->request->getHostInfo($protocol);
+				$baseUrl = craft()->request->getHostInfo($protocol ?: '');
 
 				if ($showScriptName)
 				{
@@ -449,24 +510,14 @@ class UrlHelper
 	{
 		if (is_array($params))
 		{
-			foreach ($params as $name => $value)
+			// See if there's an anchor
+			if (isset($params['#']))
 			{
-				if (!is_numeric($name))
-				{
-					if ($name == '#')
-					{
-						$anchor = '#'.$value;
-					}
-					else if ($value !== null && $value !== '')
-					{
-						$params[] = $name.'='.$value;
-					}
-
-					unset($params[$name]);
-				}
+				$anchor = '#'.$params['#'];
+				unset($params['#']);
 			}
 
-			$params = implode('&', array_filter($params));
+			$params = http_build_query($params);
 		}
 		else
 		{

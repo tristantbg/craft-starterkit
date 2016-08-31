@@ -9,8 +9,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.controllers
  * @since     2.0
  */
@@ -269,8 +269,7 @@ class CategoriesController extends BaseController
 		}
 		else
 		{
-			$variables['docTitle'] = Craft::t($variables['category']->title);
-			$variables['title'] = Craft::t($variables['category']->title);
+			$variables['docTitle'] = $variables['title'] = $variables['category']->title;
 		}
 
 		// Breadcrumbs

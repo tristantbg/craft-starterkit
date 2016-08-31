@@ -7,8 +7,8 @@ namespace Craft;
  *
  * @author     Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright  Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license    http://buildwithcraft.com/license Craft License Agreement
- * @see        http://buildwithcraft.com
+ * @license    http://craftcms.com/license Craft License Agreement
+ * @see        http://craftcms.com
  * @package    craft.app.assetsourcetypes
  * @since      1.0
  * @deprecated This class will be removed in Craft 3.0.
@@ -178,7 +178,8 @@ class LocalAssetSourceType extends BaseAssetSourceType
 
 			if ($fileModel->kind == 'image')
 			{
-				list ($width, $height) = getimagesize($indexEntryModel->uri);
+				list ($width, $height) = ImageHelper::getImageSize($indexEntryModel->uri);
+
 				$fileModel->width = $width;
 				$fileModel->height = $height;
 			}
@@ -202,9 +203,9 @@ class LocalAssetSourceType extends BaseAssetSourceType
 	 */
 	public function putImageTransform(AssetFileModel $file, AssetTransformIndexModel $index, $sourceImage)
 	{
-		$folder =  $this->getSourceFileSystemPath().$file->getFolder()->path;
+		$folder =  $this->getSourceFileSystemPath().$file->folderPath;
 		$targetPath = $folder.craft()->assetTransforms->getTransformSubpath($file, $index);
-		return IOHelper::copyFile($sourceImage, $targetPath);
+		return IOHelper::copyFile($sourceImage, $targetPath, true);
 	}
 
 	/**
@@ -216,7 +217,7 @@ class LocalAssetSourceType extends BaseAssetSourceType
 	 */
 	public function getImageSourcePath(AssetFileModel $file)
 	{
-		return $this->getSourceFileSystemPath().$file->getFolder()->path.$file->filename;
+		return $this->getSourceFileSystemPath().$file->getPath();
 	}
 
 	/**
@@ -237,10 +238,23 @@ class LocalAssetSourceType extends BaseAssetSourceType
 	}
 
 	/**
+	 * @inheritDoc BaseAssetSourceType::fileExists()
+	 *
+	 * @param string $parentPath  Parent path
+	 * @param string $filename    The name of the file.
+	 *
+	 * @return boolean
+	 */
+	public function fileExists($parentPath, $fileName)
+	{
+		return IOHelper::fileExists(rtrim($this->getSourceFileSystemPath().$parentPath, '/').'/'.$fileName);
+	}
+
+	/**
 	 * @inheritDoc BaseAssetSourceType::folderExists()
 	 *
-	 * @param AssetFolderModel $parentPath
-	 * @param string           $folderName
+	 * @param string $parentPath  Parent path
+	 * @param string $folderName
 	 *
 	 * @return boolean
 	 */
@@ -343,42 +357,23 @@ class LocalAssetSourceType extends BaseAssetSourceType
 	}
 
 	/**
-	 * @inheritDoc BaseAssetSourceType::getNameReplacement()
+	 * @inheritDoc BaseAssetSourceType::getNameReplacementInFolder()
 	 *
 	 * @param AssetFolderModel $folder
 	 * @param string           $fileName
 	 *
 	 * @return string
 	 */
-	protected function getNameReplacement(AssetFolderModel $folder, $fileName)
+	protected function getNameReplacementInFolder(AssetFolderModel $folder, $fileName)
 	{
 		$fileList = IOHelper::getFolderContents($this->getSourceFileSystemPath().$folder->path, false);
-		$existingFiles = array();
 
-		foreach ($fileList as $file)
+		foreach ($fileList as &$file)
 		{
-			$existingFiles[mb_strtolower(IOHelper::getFileName($file))] = true;
+			$file = IOHelper::getFileName($file);
 		}
 
-		// Double-check
-		if (!isset($existingFiles[mb_strtolower($fileName)]))
-		{
-			return $fileName;
-		}
-
-		$fileParts = explode(".", $fileName);
-		$extension = array_pop($fileParts);
-		$fileName = join(".", $fileParts);
-
-		for ($i = 1; $i <= 50; $i++)
-		{
-			if (!isset($existingFiles[mb_strtolower($fileName.'_'.$i.'.'.$extension)]))
-			{
-				return $fileName.'_'.$i.'.'.$extension;
-			}
-		}
-
-		return false;
+		return AssetsHelper::getFilenameReplacement($fileList, $fileName);
 	}
 
 	/**
@@ -389,8 +384,9 @@ class LocalAssetSourceType extends BaseAssetSourceType
 	protected function defineSettings()
 	{
 		return array(
-			'path' => array(AttributeType::String, 'required' => true),
-			'url'  => array(AttributeType::String, 'required' => true, 'label' => 'URL'),
+			'path'       => array(AttributeType::String, 'required' => true),
+			'publicURLs' => array(AttributeType::Bool,   'default' => true),
+			'url'        => array(AttributeType::String, 'label' => 'URL'),
 		);
 	}
 
@@ -481,7 +477,7 @@ class LocalAssetSourceType extends BaseAssetSourceType
 						craft()->assetTransforms->storeTransformIndexData($destinationIndex);
 					}
 
-					$from = $file->getFolder()->path.craft()->assetTransforms->getTransformSubpath($file, $index);
+					$from = $file->folderPath.craft()->assetTransforms->getTransformSubpath($file, $index);
 					$to   = $targetFolder->path.craft()->assetTransforms->getTransformSubpath($destination, $destinationIndex);
 
 					$this->copySourceFile($from, $to);
@@ -511,6 +507,11 @@ class LocalAssetSourceType extends BaseAssetSourceType
 	 */
 	protected function copySourceFile($sourceUri, $targetUri)
 	{
+		if ($sourceUri == $targetUri)
+		{
+			return true;
+		}
+
 		return IOHelper::copyFile($this->getSourceFileSystemPath().$sourceUri, $this->getSourceFileSystemPath().$targetUri, true);
 	}
 
@@ -586,9 +587,8 @@ class LocalAssetSourceType extends BaseAssetSourceType
 	 */
 	private function _getFileSystemPath(AssetFileModel $file)
 	{
-		$folder = $file->getFolder();
 		$fileSourceType = craft()->assetSources->getSourceTypeById($file->sourceId);
 
-		return $this->getSourceFileSystemPath($fileSourceType).$folder->path.$file->filename;
+		return $this->getSourceFileSystemPath($fileSourceType).$file->getPath();
 	}
 }

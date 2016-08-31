@@ -6,8 +6,8 @@ namespace Craft;
  *
  * @author    Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @copyright Copyright (c) 2014, Pixel & Tonic, Inc.
- * @license   http://buildwithcraft.com/license Craft License Agreement
- * @see       http://buildwithcraft.com
+ * @license   http://craftcms.com/license Craft License Agreement
+ * @see       http://craftcms.com
  * @package   craft.app.helpers
  * @since     1.0
  */
@@ -15,6 +15,49 @@ class DateTimeHelper
 {
 	// Public Methods
 	// =========================================================================
+
+    /**
+     * Determines whether the given value is an ISO-8601-formatted date, as defined by either
+     * {@link http://php.net/manual/en/class.datetime.php#datetime.constants.atom DateTime::ATOM} or
+     * {@link http://php.net/manual/en/class.datetime.php#datetime.constants.iso8601 DateTime::ISO8601} (with or without
+     * the colon between the hours and minutes of the timezone offset).
+     *
+     * @param mixed $value The value
+     *
+     * @return boolean Whether the value is an ISO-8601 date string
+     */
+    public static function isIso8601($value)
+    {
+        if (is_string($value) && preg_match('/^\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d[\+\-]\d\d\:?\d\d$/', $value))
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    /**
+     * Converts a date to an ISO-8601 string.
+     *
+     * @param mixed $date The date, in any format that {@link toDateTime()} supports.
+     *
+     * @return string|false The date formatted as an ISO-8601 string, or `false` if $date was not a valid date
+     */
+    public static function toIso8601($date)
+    {
+        $date = DateTime::createFromString($date);
+
+        if ($date)
+        {
+            return $date->format(\DateTime::ATOM);
+        }
+        else
+        {
+            return false;
+        }
+    }
 
 	/**
 	 * @return DateTime
@@ -54,9 +97,14 @@ class DateTimeHelper
 		// Eventually this will accept a database parameter and format the timestamp for the given database date/time
 		// datatype. For now, it's MySQL only.
 
-		if ($timeStamp)
+		if (!is_null($timeStamp))
 		{
-			if ($timeStamp instanceof \DateTime)
+			// If it's a global DateTime, convert it to a Craft DateTime instance, else format will choke.
+			if (is_object($timeStamp) && get_class($timeStamp) == 'DateTime')
+			{
+				$dt = new DateTime('@'.$timeStamp->getTimestamp());
+			}
+			else if ($timeStamp instanceof DateTime)
 			{
 				$dt = $timeStamp;
 			}
@@ -329,7 +377,7 @@ class DateTimeHelper
 	/**
 	 * Returns a UI-facing timestamp for a given {@link DateTime} object.
 	 *
-	 * - If the date/time is from today, only the time will be retuned in a localized format (e.g. “10:00 AM”).
+	 * - If the date/time is from today, only the time will be returned in a localized format (e.g. “10:00 AM”).
 	 * - If the date/time is from yesterday, “Yesterday” will be returned.
 	 * - If the date/time is from the last 7 days, the name of the day will be returned (e.g. “Monday”).
 	 * - Otherwise, the date will be returned in a localized format (e.g. “12/2/2014”).

@@ -17,7 +17,7 @@ return array(
   "devMode"                  => false,
   "addTrailingSlashesToUrls" => true,
   "postCpLoginRedirect"      => "entries",
-  "siteUrl"                  => "http://" . $_SERVER["SERVER_NAME"],
+  "siteUrl"                  => "http://" . $_SERVER["SERVER_NAME"] . ":8888/craft/public",
   "useEmailAsUsername"       => true,
 
   /*
